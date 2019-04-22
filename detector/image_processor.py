@@ -200,7 +200,7 @@ class FramePusher(PipelineProcessor):
         op = "Left Lane Vehicle Count: {lcnt} ||  Right Lane Vehicle Count: {rcnt}".format(
                 lcnt=left_lane_cnt,rcnt=right_lane_cnt)    
         print(op)
-#        self.push_frame_and_data(img,op)
+        self.push_frame_and_data(img,op)
         self.push_frame_and_data(context['frame'],op)
         context['op_data'] = op
         return context

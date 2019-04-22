@@ -9,4 +9,3 @@ src/*.egg-info
 lib
 lib64
 input.mp4
-static_content/*
