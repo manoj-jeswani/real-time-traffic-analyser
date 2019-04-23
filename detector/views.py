@@ -23,6 +23,7 @@ class FrameReceiver(APIView):
 		FrameReceiver.PIPELINE = PipelineRunner(pipeline=[
 		ContourDetection(bg_subtractor=FrameReceiver.MOG,
 		save_image=True, image_dir=IMAGE_DIR),
+		SpeedDetection(),
 		FramePusher(),
 		# we use y_weight == 2.0 because traffic are moving vertically on video
 		# use x_weight == 2.0 for horizontal.

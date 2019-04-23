@@ -19,7 +19,7 @@ import skvideo.io
 import requests
 import json
 VIDEO_SOURCE = "input.mp4"
-url = 'http://127.0.0.1:8080/frame-receiver'
+url = 'http://127.0.0.1:7000/frame-receiver'
 headers = {'Content-Type': 'application/json', 'Accept':'application/json'}
 cap = skvideo.io.vreader(VIDEO_SOURCE,num_frames=1000)
 cnt = 0
@@ -34,7 +34,7 @@ for frame in cap:
 	if not frame.any():
 		break
 
-	if cnt%20 == 0:
+	if cnt%10 == 0:
 
 		data = {'frame': frame.tolist()}
 		print('sending frame...')

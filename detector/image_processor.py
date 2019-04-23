@@ -1,12 +1,17 @@
+import cv2
+import dlib
+import math
 import os
 import random
+import skvideo.io
+import time
+import uuid
 
 import numpy as np
-import skvideo.io
-import cv2
 import matplotlib.pyplot as plt
-import uuid
+
 from django.conf import settings
+
 
 
 # without this some strange errors happen
@@ -159,10 +164,156 @@ class ContourDetection(PipelineProcessor):
         fg_mask = self.filter_mask(fg_mask, frame_number)
 
         if self.save_image:
-            ContourDetection.save_frame(fg_mask,"mask_%04d.png" % frame_number, flip=False)
+            ContourDetection.save_frame(fg_mask, os.path.join(settings.BASE_DIR, "fg_masks/mask_%04d.png" % frame_number), flip=False)
 
         context['objects'] = self.detect_vehicles(fg_mask, context)
         context['fg_mask'] = fg_mask
+
+        return context
+
+
+class SpeedDetection(PipelineProcessor):
+    '''
+        Detecting speed of moving vehicles.
+    '''
+
+    def __init__(self, save_image=False, image_dir='images', height=720, width=1280, frameCounter=0):
+        super(SpeedDetection, self).__init__()
+
+        self.carCascade = cv2.CascadeClassifier(os.path.join(settings.BASE_DIR, 'myhaar.xml'))
+        self.save_image = save_image
+        self.image_dir = image_dir
+        self.height = height
+        self.width = width
+        self.frameCounter = frameCounter
+
+    @staticmethod
+    def estimateSpeed(location1, location2):
+        d_pixels = math.sqrt(math.pow(location2[0] - location1[0], 2) + math.pow(location2[1] - location1[1], 2))
+        # ppm = location2[2] / carWidht
+        ppm = 8.8
+        d_meters = d_pixels / ppm
+        #print("d_pixels=" + str(d_pixels), "d_meters=" + str(d_meters))
+        fps = 18
+        speed = d_meters * fps * 3.6
+        return speed
+
+    def track_vehicles(self, image):
+
+        rectangleColor = (0, 255, 0)
+        currentCarID = 0
+        fps = 0
+        carTracker = {}
+        carNumbers = {}
+        carLocation1 = {}
+        carLocation2 = {}
+        speed = [None] * 1000
+
+        start_time = time.time()            
+
+        image = cv2.resize(image, (self.width, self.height))
+        resultImage = image.copy()
+                
+        carIDtoDelete = []
+
+        for carID in carTracker.keys():
+            trackingQuality = carTracker[carID].update(image)
+            
+            if trackingQuality < 7:
+                carIDtoDelete.append(carID)
+                
+        for carID in carIDtoDelete:
+            print ('Removing carID ' + str(carID) + ' from list of trackers.')
+            print ('Removing carID ' + str(carID) + ' previous location.')
+            print ('Removing carID ' + str(carID) + ' current location.')
+            carTracker.pop(carID, None)
+            carLocation1.pop(carID, None)
+            carLocation2.pop(carID, None)
+        
+        image = image.astype('uint8')
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        cars = self.carCascade.detectMultiScale(gray, 1.1, 13, 18, (24, 24))
+        
+        for (_x, _y, _w, _h) in cars:
+            x = int(_x)
+            y = int(_y)
+            w = int(_w)
+            h = int(_h)
+        
+            x_bar = x + 0.5 * w
+            y_bar = y + 0.5 * h
+            
+            matchCarID = None
+        
+            for carID in carTracker.keys():
+                trackedPosition = carTracker[carID].get_position()
+                
+                t_x = int(trackedPosition.left())
+                t_y = int(trackedPosition.top())
+                t_w = int(trackedPosition.width())
+                t_h = int(trackedPosition.height())
+                
+                t_x_bar = t_x + 0.5 * t_w
+                t_y_bar = t_y + 0.5 * t_h
+            
+                if ((t_x <= x_bar <= (t_x + t_w)) and (t_y <= y_bar <= (t_y + t_h)) and (x <= t_x_bar <= (x + w)) and (y <= t_y_bar <= (y + h))):
+                    matchCarID = carID
+            
+            if matchCarID is None:
+                print ('Creating new tracker ' + str(currentCarID))
+                
+                tracker = dlib.correlation_tracker()
+                tracker.start_track(image, dlib.rectangle(x, y, x + w, y + h))
+                
+                carTracker[currentCarID] = tracker
+                carLocation1[currentCarID] = [x, y, w, h]
+
+                currentCarID = currentCarID + 1
+        
+        for carID in carTracker.keys():
+            trackedPosition = carTracker[carID].get_position()
+                    
+            t_x = int(trackedPosition.left())
+            t_y = int(trackedPosition.top())
+            t_w = int(trackedPosition.width())
+            t_h = int(trackedPosition.height())
+            
+            cv2.rectangle(resultImage, (t_x, t_y), (t_x + t_w, t_y + t_h), rectangleColor, 4)
+            
+            # speed estimation
+            carLocation2[carID] = [t_x, t_y, t_w, t_h]
+        
+        end_time = time.time()
+        
+        if not (end_time == start_time):
+            fps = 1.0/(end_time - start_time)
+        
+        #cv2.putText(resultImage, 'FPS: ' + str(int(fps)), (620, 30),cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0, 0, 255), 2)
+
+        for i in carLocation1.keys():
+            [x1, y1, w1, h1] = carLocation1[i]
+            [x2, y2, w2, h2] = carLocation2[i]
+    
+            # print 'previous location: ' + str(carLocation1[i]) + ', current location: ' + str(carLocation2[i])
+            carLocation1[i] = [x2, y2, w2, h2]
+    
+            # print 'new previous location: ' + str(carLocation1[i])
+            if [x1, y1, w1, h1] != [x2, y2, w2, h2]:
+                # print('###############')
+                # print([x1, y1, w1, h1], [x2, y2, w2, h2])
+
+                if (speed[i] == None or speed[i] == 0) and y1 >= 275 and y1 <= 285:
+                    speed[i] = self.estimateSpeed([x1, y1, w1, h1], [x2, y2, w2, h2])
+                #if y1 > 275 and y1 < 285:
+                if speed[i] != None and y1 >= 180:
+                    cv2.putText(resultImage, str(int(speed[i])) + " km/hr", (int(x1 + w1/2), int(y1-5)),cv2.FONT_HERSHEY_SIMPLEX, 0.75, (255, 255, 255), 2)
+
+        return resultImage
+
+    def __call__(self, context):
+
+        frame = context['frame'].copy()
+        context['speed_frame'] = self.track_vehicles(frame)
 
         return context
 
@@ -183,7 +334,7 @@ class FramePusher(PipelineProcessor):
 
     def __call__(self, context):
 
-        img = context['frame'].copy()
+        img = context['speed_frame'].copy()
         img = img.astype(np.int32)
         c = 0
         left_lane_cnt = 0
@@ -196,12 +347,11 @@ class FramePusher(PipelineProcessor):
                 right_lane_cnt+=1
 
             x,y,w,h = tup
-            cv2.rectangle(img, (x, y), (x+w, y+h), (255,0,0), 2)
+            # cv2.rectangle(img, (x, y), (x+w, y+h), (255,0,0), 2)
         op = "Left Lane Vehicle Count: {lcnt} ||  Right Lane Vehicle Count: {rcnt}".format(
                 lcnt=left_lane_cnt,rcnt=right_lane_cnt)    
         print(op)
-        self.push_frame_and_data(img,op)
-        self.push_frame_and_data(context['frame'],op)
+        self.push_frame_and_data(img, op)
         context['op_data'] = op
         return context
 
