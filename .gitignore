@@ -10,3 +10,6 @@ lib
 lib64
 input.mp4
 static_content/detector_temp/*
+--input.mp4
+~input.mp4
+env/

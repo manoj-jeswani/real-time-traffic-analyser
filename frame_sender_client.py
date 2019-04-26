@@ -3,17 +3,17 @@ for demo purpose a saved VIDEO_SOURCE is being used and being sent frame by
 frame via API call to server.
 
 Proposed solution for client side is to use pipelining technique, where there
-will be 2 processors(pipeline stages) in the pipeline with following functions 
+will be 2 processors(pipeline stages) in the pipeline with following functions
 respectively:
 1) Function to record/capture the frame
 2) Function to send the frame to server via API call
 
 A message queue can be used, if required, in case when frame capturing rate is
-greater than the rate at which frames are being transmitted to the server. 
+greater than the rate at which frames are being transmitted to the server.
 
 '''
 
-#python frame_sender_client.py 
+#python frame_sender_client.py
 
 import skvideo.io
 import requests
@@ -34,7 +34,7 @@ for frame in cap:
 	if not frame.any():
 		break
 
-	if cnt%10 == 0:
+	if cnt%5 == 0:
 
 		data = {'frame': frame.tolist()}
 		print('sending frame...')

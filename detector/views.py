@@ -49,7 +49,7 @@ class FrameReceiver(APIView):
 def index_view(request):
 
 	ctx = {
-			
+
 	}
 
 	return render(request, 'base/index.html',ctx)

@@ -27,7 +27,7 @@ RIGHT_LANE_START = 730
 class PipelineRunner(object):
     '''
         Very simple pipline.
-        Just run passed processors in order with passing context from one to 
+        Just run passed processors in order with passing context from one to
         another.
     '''
 
@@ -76,12 +76,12 @@ class ContourDetection(PipelineProcessor):
         Detecting moving objects.
         Purpose of this processor is to subtract background, get moving objects
         and detect them with a cv2.findContours method, and then filter off-by
-        width and height. 
+        width and height.
         bg_subtractor - background subtractor isinstance.
         min_contour_width - min bounding rectangle width.
         min_contour_height - min bounding rectangle height.
         save_image - if True will save detected objects mask to file.
-        image_dir - where to save images(must exist).        
+        image_dir - where to save images(must exist).
     '''
     @staticmethod
     def get_centroid(x, y, w, h):
@@ -136,14 +136,14 @@ class ContourDetection(PipelineProcessor):
         matches = []
 
         # finding external contours
-        im2, contours, hierarchy = cv2.findContours(
+        contours, hierarchy = cv2.findContours(
             fg_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_TC89_L1)
 
         for (i, contour) in enumerate(contours):
             (x, y, w, h) = cv2.boundingRect(contour)
             contour_valid = (w >= self.min_contour_width) and (
                 h >= self.min_contour_height) and (w <= self.max_contour_width) and (
-                h <= self.max_contour_height) 
+                h <= self.max_contour_height)
 
             if not contour_valid:
                 continue
@@ -181,6 +181,7 @@ class SpeedDetection(PipelineProcessor):
         super(SpeedDetection, self).__init__()
 
         self.carCascade = cv2.CascadeClassifier(os.path.join(settings.BASE_DIR, 'myhaar.xml'))
+        self.bikeCascade = cv2.CascadeClassifier(os.path.join(settings.BASE_DIR, 'bikehaar.xml'))
         self.save_image = save_image
         self.image_dir = image_dir
         self.height = height
@@ -209,19 +210,23 @@ class SpeedDetection(PipelineProcessor):
         carLocation2 = {}
         speed = [None] * 1000
 
-        start_time = time.time()            
+        start_time = time.time()
+        # print(dir(image))
+        # print(image.size)
+        # print(image.shape)
+        # input('hajjjj')
 
         image = cv2.resize(image, (self.width, self.height))
         resultImage = image.copy()
-                
+
         carIDtoDelete = []
 
         for carID in carTracker.keys():
             trackingQuality = carTracker[carID].update(image)
-            
+
             if trackingQuality < 7:
                 carIDtoDelete.append(carID)
-                
+
         for carID in carIDtoDelete:
             print ('Removing carID ' + str(carID) + ' from list of trackers.')
             print ('Removing carID ' + str(carID) + ' previous location.')
@@ -229,74 +234,76 @@ class SpeedDetection(PipelineProcessor):
             carTracker.pop(carID, None)
             carLocation1.pop(carID, None)
             carLocation2.pop(carID, None)
-        
+
         image = image.astype('uint8')
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         cars = self.carCascade.detectMultiScale(gray, 1.1, 13, 18, (24, 24))
-        
+
+        cv2.rectangle(resultImage, (150, 250), (850, 350), (0, 255, 255), 4)
+
         for (_x, _y, _w, _h) in cars:
             x = int(_x)
             y = int(_y)
             w = int(_w)
             h = int(_h)
-        
+
             x_bar = x + 0.5 * w
             y_bar = y + 0.5 * h
-            
+
             matchCarID = None
-        
+
             for carID in carTracker.keys():
                 trackedPosition = carTracker[carID].get_position()
-                
+
                 t_x = int(trackedPosition.left())
                 t_y = int(trackedPosition.top())
                 t_w = int(trackedPosition.width())
                 t_h = int(trackedPosition.height())
-                
+
                 t_x_bar = t_x + 0.5 * t_w
                 t_y_bar = t_y + 0.5 * t_h
-            
+
                 if ((t_x <= x_bar <= (t_x + t_w)) and (t_y <= y_bar <= (t_y + t_h)) and (x <= t_x_bar <= (x + w)) and (y <= t_y_bar <= (y + h))):
                     matchCarID = carID
-            
+
             if matchCarID is None:
                 print ('Creating new tracker ' + str(currentCarID))
-                
+
                 tracker = dlib.correlation_tracker()
                 tracker.start_track(image, dlib.rectangle(x, y, x + w, y + h))
-                
+
                 carTracker[currentCarID] = tracker
                 carLocation1[currentCarID] = [x, y, w, h]
 
                 currentCarID = currentCarID + 1
-        
+
         for carID in carTracker.keys():
             trackedPosition = carTracker[carID].get_position()
-                    
+
             t_x = int(trackedPosition.left())
             t_y = int(trackedPosition.top())
             t_w = int(trackedPosition.width())
             t_h = int(trackedPosition.height())
-            
+
             cv2.rectangle(resultImage, (t_x, t_y), (t_x + t_w, t_y + t_h), rectangleColor, 4)
-            
+
             # speed estimation
             carLocation2[carID] = [t_x, t_y, t_w, t_h]
-        
+
         end_time = time.time()
-        
+
         if not (end_time == start_time):
             fps = 1.0/(end_time - start_time)
-        
+
         #cv2.putText(resultImage, 'FPS: ' + str(int(fps)), (620, 30),cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0, 0, 255), 2)
 
         for i in carLocation1.keys():
             [x1, y1, w1, h1] = carLocation1[i]
             [x2, y2, w2, h2] = carLocation2[i]
-    
+
             # print 'previous location: ' + str(carLocation1[i]) + ', current location: ' + str(carLocation2[i])
             carLocation1[i] = [x2, y2, w2, h2]
-    
+
             # print 'new previous location: ' + str(carLocation1[i])
             if [x1, y1, w1, h1] != [x2, y2, w2, h2]:
                 # print('###############')
@@ -327,7 +334,7 @@ class FramePusher(PipelineProcessor):
         IMAGE_DIR = os.path.join(settings.BASE_DIR, "static_content/detector_temp/")
         uid = uuid.uuid4()
         cv2.imwrite('{IMAGE_DIR}{n}.png'.format(IMAGE_DIR=IMAGE_DIR,n=uid),frame)
-        settings.PUSHER_CLIENT.trigger('my-channel', 'my-event', 
+        settings.PUSHER_CLIENT.trigger('my-channel', 'my-event',
         {'frame_url': '/static/detector_temp/{n}.png'.format(n=uid),
          'op_data': str(op),
         })
@@ -339,7 +346,7 @@ class FramePusher(PipelineProcessor):
         c = 0
         left_lane_cnt = 0
         right_lane_cnt = 0
-        
+
         for tup,centroid in context['objects']:
             if centroid[0] <= LEFT_LANE_END:
                 left_lane_cnt+=1
@@ -349,7 +356,7 @@ class FramePusher(PipelineProcessor):
             x,y,w,h = tup
             # cv2.rectangle(img, (x, y), (x+w, y+h), (255,0,0), 2)
         op = "Left Lane Vehicle Count: {lcnt} ||  Right Lane Vehicle Count: {rcnt}".format(
-                lcnt=left_lane_cnt,rcnt=right_lane_cnt)    
+                lcnt=left_lane_cnt,rcnt=right_lane_cnt)
         print(op)
         self.push_frame_and_data(img, op)
         context['op_data'] = op
