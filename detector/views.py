@@ -17,12 +17,10 @@ class FrameReceiver(APIView):
 	MOG = None
 	PIPELINE = None
 	def get(self,request,format=None):
-		FrameReceiver.MOG = trainer.fun()
+		# FrameReceiver.MOG = trainer.fun()
 		print("\nCreating image processing pipeline...\n")
 		# processing pipline for programming conviniance
 		FrameReceiver.PIPELINE = PipelineRunner(pipeline=[
-		ContourDetection(bg_subtractor=FrameReceiver.MOG,
-		save_image=True, image_dir=IMAGE_DIR),
 		SpeedDetection(),
 		FramePusher(),
 		# we use y_weight == 2.0 because traffic are moving vertically on video
@@ -32,6 +30,8 @@ class FrameReceiver(APIView):
 
 	def post(self, request, format=None):
 		frame = request.data['frame']
+		frame_counter = request.data['frame_counter']
+
 		frame = numpy.array(frame)
 		if isinstance(frame,numpy.ndarray):
 			print(FrameReceiver.MOG)
@@ -39,6 +39,7 @@ class FrameReceiver(APIView):
 			FrameReceiver.PIPELINE.set_context({
 			'frame': frame,
 			'frame_number': uuid.uuid4(),
+			'frame_counter': frame_counter,
 			})
 			ctx = FrameReceiver.PIPELINE.run()
 			return Response(None, status=status.HTTP_201_CREATED)

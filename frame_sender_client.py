@@ -36,7 +36,10 @@ for frame in cap:
 
 	if cnt%5 == 0:
 
-		data = {'frame': frame.tolist()}
+		data = {
+                    'frame': frame.tolist(),
+                    'frame_counter': cnt,
+                }
 		print('sending frame...')
 		resp = requests.post(url,data=json.dumps(data), headers=headers)
 		print("Response code = ", resp.status_code)
